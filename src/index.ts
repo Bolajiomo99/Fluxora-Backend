@@ -2,12 +2,18 @@
  * Fluxora Backend - server entry point.
  *
  * Responsibilities:
+ *  - Start OpenTelemetry SDK BEFORE any other import so auto-instrumentation
+ *    patches are applied before express/pg/ioredis are loaded.
  *  - Bind the Express app to a TCP port.
  *  - Register OS signal handlers for graceful shutdown.
  *
  * Everything else (routes, middleware, app config) lives in app.ts.
  * Shutdown logic (drain + hooks) lives in shutdown.ts.
  */
+
+// ⚠️  OTel SDK must be the very first import — do not move this line.
+import { startTracing, stopTracing } from './tracing/index.js';
+startTracing();
 
 import http from 'node:http';
 import { gracefulShutdown, addShutdownHook } from './shutdown.js';
@@ -39,6 +45,12 @@ async function startServer() {
     logger.info('WebSocket hub initialized', undefined, { path: '/ws/streams' });
 
     // Register shutdown hooks
+    addShutdownHook(async () => {
+      logger.info('Flushing OpenTelemetry spans...');
+      await stopTracing();
+      logger.info('OpenTelemetry SDK stopped');
+    });
+
     addShutdownHook(async () => {
       logger.info('Closing database connections...');
       const pool = getPool();
