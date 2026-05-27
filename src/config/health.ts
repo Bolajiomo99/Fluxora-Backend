@@ -1,3 +1,4 @@
+import { getConfig } from './env.js';
 export type HealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 
 export interface DependencyHealth {
@@ -23,9 +24,8 @@ export interface HealthChecker {
 }
 
 export class HealthCheckManager {
-  private checkers: Map<string, HealthChecker> = new Map();
-  private lastResults: Map<string, DependencyHealth> = new Map();
-  private startTime = Date.now();
+  private get timeoutMs() { return getConfig().healthCheckTimeoutMs; }
+  private get intervalMs() { return getConfig().healthCheckIntervalMs; }
 
   registerChecker(checker: HealthChecker): void {
     this.checkers.set(checker.name, checker);

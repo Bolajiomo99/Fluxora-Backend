@@ -21,9 +21,13 @@ COPY --chown=node:node src ./src
 
 USER node
 
+# Expose healthcheck arguments with sensible defaults
+ARG HEALTH_INTERVAL=30s
+ARG HEALTH_TIMEOUT=5s
+
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=${HEALTH_INTERVAL} --timeout=${HEALTH_TIMEOUT} --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["node", "--import", "tsx", "src/index.ts"]

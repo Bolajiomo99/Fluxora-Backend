@@ -40,3 +40,30 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+  docker-build:
+    name: Build & Smoke Test Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t fluxora-backend:ci-test .
+
+      - name: Start Container
+        run: docker run -d -p 3000:3000 --name fluxora-test-container fluxora-backend:ci-test
+
+      - name: Smoke Test Health Check
+        run: |
+          echo "Waiting for container to report healthy..."
+          for i in {1..12}; do
+            STATUS=$(docker inspect -f '{{.State.Health.Status}}' fluxora-test-container)
+            if [ "$STATUS" == "healthy" ]; then
+              echo "Container is healthy!"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Container failed to become healthy. Fetching logs..."
+          docker logs fluxora-test-container
+          exit 1
