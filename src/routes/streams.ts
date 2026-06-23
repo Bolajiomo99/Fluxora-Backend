@@ -57,8 +57,8 @@ import {
   validateDecimalString,
   validateAmountFields,
 } from '../serialization/decimal.js';
+import { ApiError } from '../errors.js';
 import {
-  ApiError,
   ApiErrorCode,
   notFound,
   validationError,
