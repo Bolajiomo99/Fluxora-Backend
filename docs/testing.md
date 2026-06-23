@@ -16,6 +16,59 @@ were never executed under CI. All test files now use Vitest imports or globals.
 -   **Performance** — Vitest re-uses Vite's transform pipeline, making
     incremental test runs significantly faster.
 
+Administrative and operational endpoints require credentials depending on their mounting context:
+1. **General Admin Endpoints (`/api/admin/*`)**:
+   Protected by `requireAdminAuth`, verifying that a request's `Authorization: Bearer <ADMIN_API_KEY>` matches `process.env.ADMIN_API_KEY`.
+2. **Dead-Letter Queue Endpoints (`/admin/dlq/*`)**:
+   Protected by `authenticate`, `requireAuth`, and `requireOperator`, requiring a valid JWT issued to an address with `role: 'operator'`.
+
+## State Isolation & Resets
+
+To ensure deterministic behavior and prevent test-to-test side effects, in-process state is initialized and purged in `beforeEach`/`afterEach` hooks:
+- **Pause & Reindex State**: Cleared using `_resetForTest()` from `src/state/adminState.ts`.
+- **API Key Records**: Persisted in PostgreSQL via `apiKeyRepository`. Tests inject an in-memory fake of `src/db/repositories/apiKeyRepository.ts` (see `tests/lib/auth.test.ts`) and reset it in `beforeEach`.
+- **DLQ Entries**: Cleared using `_resetDlq()` from `src/routes/dlq.ts`.
+
+## Supertest Integration
+
+All endpoints are tested by running requests against the in-process Express application (`app` from `src/app.js`):
+
+```typescript
+import request from 'supertest';
+import { app } from '../../src/app.js';
+
+const res = await request(app)
+  .get('/api/admin/pause')
+  .set('Authorization', `Bearer \${process.env.ADMIN_API_KEY}`);
+```
+
+---
+
+## End-to-End (E2E) Tests
+
+E2E tests live in `tests/e2e/` and exercise the full stack: HTTP → Express → PostgreSQL → (optionally) Stellar testnet RPC.
+
+### Test file
+
+`tests/e2e/streams.e2e.test.ts` covers the complete stream lifecycle:
+
+| Scenario | Expected outcome |
+|---|---|
+| `GET /health` | 200 `{ status: 'ok' }` |
+| `POST /api/streams` (valid) | 201, decimal-string amounts |
+| `POST /api/streams` (same Idempotency-Key) | 201 replay, `Idempotency-Replayed: true` header |
+| `POST /api/streams` (missing Idempotency-Key) | 400 |
+| `POST /api/streams` (numeric amount) | 400 |
+| `GET /api/streams/:id` (exists) | 200 with stream data |
+| `GET /api/streams/:id` (unknown) | 404 |
+| `GET /api/streams` | 200, non-empty list |
+| `DELETE /api/streams/:id` | 200 or 401 (auth-dependent) |
+| Security headers | `x-content-type-options: nosniff` present |
+
+### Running locally (offline — no database required)
+
+The test mocks the DB layer automatically when `DATABASE_URL` is not set:
+
 ## Running Tests
 
 ```bash
