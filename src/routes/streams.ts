@@ -111,6 +111,8 @@ export interface Stream {
   sender: string;
   recipient: string;
   depositAmount: string;
+  streamedAmount: string;
+  remainingAmount: string;
   ratePerSecond: string;
   startTime: number;
   endTime: number;
@@ -197,6 +199,8 @@ function toApiStream(record: StreamRecord): Stream {
     sender:        record.sender_address,
     recipient:     record.recipient_address,
     depositAmount: record.amount,
+    streamedAmount: record.streamed_amount,
+    remainingAmount: record.remaining_amount,
     ratePerSecond: record.rate_per_second,
     startTime:     record.start_time,
     endTime:       record.end_time,
@@ -347,10 +351,9 @@ function wrapDbError(err: unknown): never {
 
 // ── API status state machine ──────────────────────────────────────────────────
 
-type ApiStreamStatus = 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled';
+type ApiStreamStatus = 'active' | 'paused' | 'completed' | 'cancelled';
 
 const API_TRANSITIONS: Record<ApiStreamStatus, ApiStreamStatus[]> = {
-  scheduled:  ['active', 'cancelled'],
   active:     ['paused', 'completed', 'cancelled'],
   paused:     ['active', 'cancelled'],
   completed:  [],
@@ -744,9 +747,9 @@ streamsRouter.patch(
       throw notFound('Stream', '');
     }
 
-    const validStatuses: ApiStreamStatus[] = ['scheduled', 'active', 'paused', 'completed', 'cancelled'];
+    const validStatuses: ApiStreamStatus[] = ['active', 'paused', 'completed', 'cancelled'];
     if (typeof newStatus !== 'string' || !validStatuses.includes(newStatus as ApiStreamStatus)) {
-      throw validationError('status must be one of: scheduled, active, paused, completed, cancelled');
+      throw validationError('status must be one of: active, paused, completed, cancelled');
     }
 
     let record;
@@ -769,8 +772,7 @@ streamsRouter.patch(
 
     let updated;
     try {
-      // 'scheduled' is an API-only concept; map to 'active' in DB
-      const dbStatus = newStatus === 'scheduled' ? 'active' : newStatus as StreamStatus;
+      const dbStatus = newStatus as StreamStatus;
       updated = await streamRepository.updateStream(id, { status: dbStatus }, requestId ?? '');
     } catch (err) {
       wrapDbError(err);
